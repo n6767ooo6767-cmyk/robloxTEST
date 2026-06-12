@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mini Blox Game</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background: #87ceeb;
+    }
+
+    #info {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(255,255,255,0.8);
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 14px;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    WASD — ходить<br>
+    Space — прыгать<br>
+    Мышь — крутить камеру
+  </div>
+
+  <script type="module">
+    import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    );
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(5, 10, 5);
+    scene.add(light);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambient);
+
+    // Земля
+    const groundGeometry = new THREE.BoxGeometry(60, 1, 60);
+    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x3cb043 });
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.position.y = -0.5;
+    scene.add(ground);
+
+    // Игрок в стиле Roblox
+    const player = new THREE.Group();
+
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(1.2, 1.6, 0.7),
+      new THREE.MeshStandardMaterial({ color: 0x0066ff })
+    );
+    body.position.y = 2;
+    player.add(body);
+
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({ color: 0xffcc99 })
+    );
+    head.position.y = 3.3;
+    player.add(head);
+
+    const leftArm = new THREE.Mesh(
+      new THREE.BoxGeometry(0.35, 1.4, 0.35),
+      new THREE.MeshStandardMaterial({ color: 0xffcc99 })
+    );
+    leftArm.position.set(-0.95, 2, 0);
+    player.add(leftArm);
+
+    const rightArm = leftArm.clone();
+    rightArm.position.x = 0.95;
+    player.add(rightArm);
+
+    const leftLeg = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 1.4, 0.45),
+      new THREE.MeshStandardMaterial({ color: 0x222222 })
+    );
+    leftLeg.position.set(-0.35, 0.5, 0);
+    player.add(leftLeg);
+
+    const rightLeg = leftLeg.clone();
+    rightLeg.position.x = 0.35;
+    player.add(rightLeg);
+
+    player.position.set(0, 0, 0);
+    scene.add(player);
+
+    // Платформы
+    const platforms = [];
+
+    function createPlatform(x, y, z, w, h, d, color) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({ color })
+      );
+      mesh.position.set(x, y, z);
+      scene.add(mesh);
+      platforms.push(mesh);
+    }
+
+    createPlatform(5, 1, -5, 5, 1, 5, 0xff5555);
+    createPlatform(-6, 2.5, -9, 4, 1, 4, 0xffff66);
+    createPlatform(0, 4, -15, 6, 1, 4, 0x66ccff);
+    createPlatform(8, 6, -20, 5, 1, 5, 0xff99ff);
+
+    // Простые деревья
+    function createTree(x, z) {
+      const trunk = new THREE.Mesh(
+        new THREE.BoxGeometry(0.6, 3, 0.6),
+        new THREE.MeshStandardMaterial({ color: 0x8b4513 })
+      );
+      trunk.position.set(x, 1.5, z);
+      scene.add(trunk);
+
+      const crown = new THREE.Mesh(
+        new THREE.BoxGeometry(3, 3, 3),
+        new THREE.MeshStandardMaterial({ color: 0x0b6623 })
+      );
+      crown.position.set(x, 4, z);
+      scene.add(crown);
+    }
+
+    createTree(-10, -5);
+    createTree(12, 8);
+    createTree(-15, 12);
+    createTree(15, -12);
+
+    const keys = {};
+    let velocityY = 0;
+    let onGround = true;
+    let cameraAngle = 0;
+
+    document.addEventListener("keydown", e => {
+      keys[e.code] = true;
+    });
+
+    document.addEventListener("keyup", e => {
+      keys[e.code] = false;
+    });
+
+    document.addEventListener("mousemove", e => {
+      if (document.pointerLockElement === document.body) {
+        cameraAngle -= e.movementX * 0.003;
+      }
+    });
+
+    document.body.addEventListener("click", () => {
+      document.body.requestPointerLock();
+    });
+
+    function checkPlatformCollision() {
+      onGround = false;
+
+      const playerX = player.position.x;
+      const playerY = player.position.y;
+      const playerZ = player.position.z;
+
+      if (playerY <= 0) {
+        player.position.y = 0;
+        velocityY = 0;
+        onGround = true;
+      }
+
+      for (const platform of platforms) {
+        const box = new THREE.Box3().setFromObject(platform);
+
+        if (
+          playerX > box.min.x - 0.5 &&
+          playerX < box.max.x + 0.5 &&
+          playerZ > box.min.z - 0.5 &&
+          playerZ < box.max.z + 0.5 &&
+          playerY > box.max.y - 0.3 &&
+          playerY < box.max.y + 0.5 &&
+          velocityY <= 0
+        ) {
+          player.position.y = box.max.y;
+          velocityY = 0;
+          onGround = true;
+        }
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const speed = 0.15;
+
+      const forward = new THREE.Vector3(
+        Math.sin(cameraAngle),
+        0,
+        Math.cos(cameraAngle)
+      );
+
+      const right = new THREE.Vector3(
+        Math.cos(cameraAngle),
+        0,
+        -Math.sin(cameraAngle)
+      );
+
+      if (keys["KeyW"]) player.position.add(forward.clone().multiplyScalar(-speed));
+      if (keys["KeyS"]) player.position.add(forward.clone().multiplyScalar(speed));
+      if (keys["KeyA"]) player.position.add(right.clone().multiplyScalar(-speed));
+      if (keys["KeyD"]) player.position.add(right.clone().multiplyScalar(speed));
+
+      if (keys["Space"] && onGround) {
+        velocityY = 0.28;
+        onGround = false;
+      }
+
+      velocityY -= 0.012;
+      player.position.y += velocityY;
+
+      checkPlatformCollision();
+
+      player.rotation.y = cameraAngle;
+
+      camera.position.x = player.position.x + Math.sin(cameraAngle) * 8;
+      camera.position.z = player.position.z + Math.cos(cameraAngle) * 8;
+      camera.position.y = player.position.y + 5;
+
+      camera.lookAt(player.position.x, player.position.y + 2, player.position.z);
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
